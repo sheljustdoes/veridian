@@ -1,0 +1,8 @@
+openai
+numpy
+scikit-learn
+tqdm
+requests
+python-dotenv
+matplotlib
+umap-learn
