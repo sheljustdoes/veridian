@@ -20,7 +20,7 @@ When entering a topic, researchers often face:
 * No obvious starting point
 * Hidden foundational assumptions
 
-Veridian aims to:
+veridian. aims to:
 
 * Map the intellectual terrain of a research topic
 * Identify dominant, emerging, and minority interpretations
@@ -36,14 +36,14 @@ It is an orientation and reflection system.
 
 ## Core Principles
 
-Veridian is built on five principles:
+veridian. is built on five principles:
 
 1. **Corpus-Bounded Claims**
    All reflection is grounded in retrieved literature.
    The system never claims universal truth — only corpus-relative structure.
 
 2. **Reflective, Not Evaluative**
-   Veridian does not grade.
+   veridian. does not grade.
    It surfaces omissions, alignment, and unsupported claims.
 
 3. **Intellectual Friction Is Healthy**
@@ -56,11 +56,11 @@ Veridian is built on five principles:
 
 5. **User Agency**
    The user remains the final arbiter.
-   Veridian provides structure, not authority.
+   veridian. provides structure, not authority.
 
 ---
 
-## What Veridian Does (Current Prototype)
+## What veridian. Does (Current Prototype)
 
 1. Accepts a research query.
 2. Retrieves abstracts from PubMed.
@@ -76,7 +76,7 @@ This is a structural prototype, not a finished product.
 
 ---
 
-## What Veridian Is Not
+## What veridian. Is Not
 
 * A literature review generator
 * A summary engine
@@ -91,7 +91,7 @@ It is a scaffold for structured thinking.
 
 ## Long-Term Vision
 
-Veridian may evolve to include:
+veridian. may evolve to include:
 
 * Citation-weighted cluster centrality
 * Dominant / emerging / minority interpretation labeling
@@ -108,7 +108,7 @@ The goal is clarity.
 
 ## Design Ethos
 
-Veridian assumes:
+veridian. assumes:
 
 * Expertise is built through articulation and revision.
 * Confidence should be proportional to evidence.
