@@ -166,3 +166,78 @@ Then open:
 * Web mode still requires `OPENAI_API_KEY` in `.env` (or environment).
 * Search results are constrained to 25-50 PubMed records per run.
 * Retrieved abstracts are persisted to `corpus.json`.
+
+---
+
+## Deploy on GitHub Pages
+
+GitHub Pages can only host static files. Veridian needs a Python backend for PubMed + OpenAI calls.
+
+Use a split deployment:
+
+1. **Frontend** (`index.html`) on GitHub Pages.
+2. **Backend** (`veridian.py`) on a Python host (Render, Railway, Fly.io, etc.).
+
+### 1) Deploy backend (example start command)
+
+```bash
+python veridian.py --web --host 0.0.0.0 --port $PORT
+```
+
+Set environment variable on your host:
+
+```bash
+OPENAI_API_KEY=your_key_here
+```
+
+### 2) Publish frontend to GitHub Pages
+
+Push this repo to GitHub, then enable Pages:
+
+* **Settings → Pages**
+* **Build and deployment → Source: Deploy from a branch**
+* Select branch (for example `main`) and folder (`/ (root)`)
+
+### 3) Connect Pages frontend to backend API
+
+Open your GitHub Pages URL with `apiBase` query param:
+
+```text
+https://<your-username>.github.io/<repo>/?apiBase=https://<your-backend-domain>
+```
+
+The frontend stores this value and uses it for `/api/search` requests.
+
+### Portfolio mode (neutered functionality)
+
+For portfolio/public website use, the frontend now supports a built-in **portfolio mode**:
+
+* No PubMed requests
+* No OpenAI calls
+* No backend dependency
+* Simulated loading + demo cluster visualization
+
+Behavior:
+
+* On `github.io`, portfolio mode is enabled automatically unless `live=1` is set.
+* If no `apiBase` is configured, portfolio mode is also used.
+
+Useful URLs:
+
+```text
+https://<your-username>.github.io/<repo>/
+```
+
+(Auto portfolio mode)
+
+```text
+https://<your-username>.github.io/<repo>/?portfolio=1
+```
+
+(Force portfolio mode)
+
+```text
+https://<your-username>.github.io/<repo>/?apiBase=https://<your-backend-domain>&live=1
+```
+
+(Force live backend mode)

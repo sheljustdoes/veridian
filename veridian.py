@@ -15,6 +15,7 @@ import requests
 import xml.etree.ElementTree as ET
 import time
 from flask import Flask, jsonify, request, send_from_directory
+from flask_cors import CORS
 
 
 # -----------------------------
@@ -361,6 +362,7 @@ def build_cluster_payload(query, rationale, max_results=50, n_clusters=N_CLUSTER
 
 def create_web_app():
     app = Flask(__name__, static_folder=".")
+    CORS(app)
 
     @app.get("/")
     def index():

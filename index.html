@@ -265,7 +265,7 @@
   <main class="shell">
     <div class="topbar">
       <div class="brand">veridian.</div>
-      <div class="status">Corpus-grounded cognition</div>
+      <div id="statusText" class="status">Corpus-grounded cognition</div>
     </div>
 
     <section class="hero">
@@ -314,16 +314,42 @@
 
   <script>
     const palette = ["#3A4D8F", "#D4603A", "#E8A830", "#2E5A45", "#7A8FB5", "#E8B4A2"];
+    const params = new URLSearchParams(window.location.search);
+    const API_BASE = (() => {
+      const queryBase = params.get("apiBase");
+      const storageKey = "veridian_api_base";
+
+      if (queryBase) {
+        const normalized = queryBase.replace(/\/+$/, "");
+        localStorage.setItem(storageKey, normalized);
+        return normalized;
+      }
+
+      const stored = localStorage.getItem(storageKey);
+      return stored ? stored.replace(/\/+$/, "") : "";
+    })();
+    const IS_GITHUB_PAGES = window.location.hostname.endsWith("github.io");
+    const FORCE_PORTFOLIO = params.get("portfolio") === "1";
+    const FORCE_LIVE = params.get("live") === "1";
+    const PORTFOLIO_MODE = FORCE_PORTFOLIO || (!FORCE_LIVE && (IS_GITHUB_PAGES || !API_BASE));
 
     const queryInput = document.getElementById("query");
     const rationaleInput = document.getElementById("rationale");
     const maxResultsInput = document.getElementById("maxResults");
     const submitButton = document.getElementById("submit");
+    const statusText = document.getElementById("statusText");
     const loadingNode = document.getElementById("loading");
     const errorNode = document.getElementById("error");
     const resultsNode = document.getElementById("results");
     const summaryBar = document.getElementById("summaryBar");
     const clusterGrid = document.getElementById("clusterGrid");
+
+    if (PORTFOLIO_MODE) {
+      statusText.textContent = "Portfolio mode · live retrieval disabled";
+      maxResultsInput.disabled = true;
+      maxResultsInput.value = 30;
+      maxResultsInput.title = "Disabled in portfolio mode";
+    }
 
     const showLoading = (value) => {
       loadingNode.style.display = value ? "flex" : "none";
@@ -348,6 +374,72 @@
       return {
         title: titleMatch ? titleMatch[1].trim() : "Cluster",
         body: summaryMatch ? summaryMatch[1].trim() : summaryText.trim()
+      };
+    };
+
+    const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    const buildPortfolioPayload = (query, rationale) => {
+      const topic = query || "research domain";
+      const rationaleLine = rationale
+        ? ` Your rationale emphasizes: ${rationale}.`
+        : "";
+
+      const points = [
+        { x: -2.6, y: 1.8, cluster: 0, title: `${topic}: foundational definitions` },
+        { x: -2.1, y: 1.5, cluster: 0, title: `${topic}: scope and assumptions` },
+        { x: -1.8, y: 2.0, cluster: 0, title: `${topic}: canonical framing thread` },
+        { x: -2.3, y: 1.0, cluster: 0, title: `${topic}: methodological baseline` },
+        { x: -0.4, y: 0.2, cluster: 1, title: `${topic}: dominant empirical findings` },
+        { x: 0.1, y: 0.0, cluster: 1, title: `${topic}: reproducible outcomes` },
+        { x: 0.4, y: 0.3, cluster: 1, title: `${topic}: intervention and application studies` },
+        { x: -0.1, y: -0.3, cluster: 1, title: `${topic}: implementation constraints` },
+        { x: 2.0, y: -0.8, cluster: 2, title: `${topic}: emerging interpretation` },
+        { x: 2.4, y: -1.1, cluster: 2, title: `${topic}: minority viewpoint` },
+        { x: 2.1, y: -0.3, cluster: 2, title: `${topic}: unresolved tension` },
+        { x: 2.7, y: -0.6, cluster: 2, title: `${topic}: future research direction` }
+      ];
+
+      return {
+        query,
+        rationale,
+        total_documents: 30,
+        clusters: [
+          {
+            id: 0,
+            count: 10,
+            summary: `Title: Terrain foundations\nSummary: This cluster maps foundational papers that define ${topic}, including key assumptions, terminology, and boundaries. It is the orientation layer Veridian uses before comparing interpretations.${rationaleLine}`,
+            documents: [
+              { title: `${topic} conceptual baseline`, year: 2018 },
+              { title: `${topic} terminology synthesis`, year: 2019 },
+              { title: `${topic} foundational review map`, year: 2020 },
+              { title: `${topic} entry methodology`, year: 2021 }
+            ]
+          },
+          {
+            id: 1,
+            count: 12,
+            summary: `Title: Dominant evidence stream\nSummary: This cluster captures the dominant empirical thread for ${topic}, emphasizing outcomes, methods, and reproducibility. It reflects where evidence density is strongest in the current landscape.`,
+            documents: [
+              { title: `${topic} intervention benchmark`, year: 2021 },
+              { title: `${topic} implementation outcomes`, year: 2022 },
+              { title: `${topic} operational case comparison`, year: 2023 },
+              { title: `${topic} replication-focused analysis`, year: 2024 }
+            ]
+          },
+          {
+            id: 2,
+            count: 8,
+            summary: `Title: Emerging and minority interpretations\nSummary: This cluster surfaces lower-frequency interpretations around ${topic} that challenge dominant assumptions. Veridian highlights this region to support epistemic humility and clarify unresolved debate structure.`,
+            documents: [
+              { title: `${topic} alternative explanatory model`, year: 2022 },
+              { title: `${topic} critical minority brief`, year: 2023 },
+              { title: `${topic} emerging debate synthesis`, year: 2024 },
+              { title: `${topic} open-questions memo`, year: 2025 }
+            ]
+          }
+        ],
+        points
       };
     };
 
@@ -440,7 +532,24 @@
       resultsNode.style.display = "none";
 
       try {
-        const response = await fetch("/api/search", {
+        if (PORTFOLIO_MODE) {
+          await sleep(1200);
+          const data = buildPortfolioPayload(query, rationale);
+
+          summaryBar.innerHTML = `
+            <span>Query: ${data.query}</span>
+            <span>Docs: ${data.total_documents}</span>
+            <span>Clusters: ${data.clusters.length}</span>
+            <span>Mode: portfolio demo</span>
+          `;
+
+          renderPlot(data.points || []);
+          renderClusters(data.clusters || []);
+          resultsNode.style.display = "grid";
+          return;
+        }
+
+        const response = await fetch(`${API_BASE}/api/search`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query, rationale, max_results: maxResults })
