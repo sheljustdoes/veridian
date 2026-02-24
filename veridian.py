@@ -2,6 +2,7 @@ import json
 import os
 import argparse
 from pathlib import Path
+from collections import defaultdict
 import numpy as np
 import matplotlib.pyplot as plt
 import umap
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 import requests
 import xml.etree.ElementTree as ET
 import time
+from flask import Flask, jsonify, request, send_from_directory
 
 
 # -----------------------------
@@ -146,7 +148,7 @@ def cluster_embeddings(embeddings, n_clusters=N_CLUSTERS):
     return labels, centroids
 
 
-def summarize_cluster(cluster_id, corpus, labels):
+def summarize_cluster(cluster_id, corpus, labels, rationale=""):
     cluster_texts = [
         corpus[i]["abstract"]
         for i in range(len(labels))
@@ -158,8 +160,11 @@ def summarize_cluster(cluster_id, corpus, labels):
 
     sample_text = "\n\n".join(cluster_texts[:5])
 
+    rationale_line = f"User search rationale: {rationale}\n" if rationale else ""
+
     prompt = f"""
 Below are abstracts from a research cluster.
+{rationale_line}
 
 Summarize the shared theme in 2-3 sentences.
 Provide:
@@ -196,6 +201,11 @@ def visualize_clusters(embeddings, labels):
     plt.ylabel("UMAP-2")
     plt.colorbar(scatter, label="Cluster ID")
     plt.show()
+
+
+def compute_umap_points(embeddings):
+    reducer = umap.UMAP(n_components=2, random_state=42)
+    return reducer.fit_transform(embeddings)
 
 # -----------------------------
 # CLAIM EXTRACTION
@@ -293,6 +303,89 @@ def prompt_max_results(min_results=25, max_results=50, default=50):
 
         print(f"Please choose a value between {min_results} and {max_results}.")
 
+
+def build_cluster_payload(query, rationale, max_results=50, n_clusters=N_CLUSTERS):
+    pmids = search_pubmed(query, max_results)
+    if not pmids:
+        raise ValueError("No PubMed records found for that query.")
+
+    corpus = fetch_abstracts(pmids)
+    if not corpus:
+        raise ValueError("No abstracts with text were retrieved for that query.")
+
+    texts = [paper["abstract"] for paper in corpus]
+    embeddings = embed_texts(texts)
+    labels, _ = cluster_embeddings(embeddings, n_clusters=n_clusters)
+    points = compute_umap_points(embeddings)
+
+    cluster_docs = defaultdict(list)
+    for idx, label in enumerate(labels):
+        cluster_docs[int(label)].append({
+            "title": corpus[idx].get("title", "Untitled"),
+            "year": corpus[idx].get("year"),
+            "abstract": corpus[idx].get("abstract", "")
+        })
+
+    clusters = []
+    unique_clusters = sorted(set(int(x) for x in labels.tolist()))
+    for cluster_id in unique_clusters:
+        summary = summarize_cluster(cluster_id, corpus, labels, rationale=rationale)
+        docs = cluster_docs[cluster_id]
+        clusters.append({
+            "id": cluster_id,
+            "count": len(docs),
+            "summary": summary,
+            "documents": docs[:10]
+        })
+
+    points_payload = []
+    for i, point in enumerate(points):
+        points_payload.append({
+            "x": float(point[0]),
+            "y": float(point[1]),
+            "cluster": int(labels[i]),
+            "title": corpus[i].get("title", "Untitled")
+        })
+
+    with open("corpus.json", "w") as f:
+        json.dump(corpus, f, indent=2)
+
+    return {
+        "query": query,
+        "rationale": rationale,
+        "total_documents": len(corpus),
+        "clusters": clusters,
+        "points": points_payload
+    }
+
+
+def create_web_app():
+    app = Flask(__name__, static_folder=".")
+
+    @app.get("/")
+    def index():
+        return send_from_directory(".", "index.html")
+
+    @app.post("/api/search")
+    def api_search():
+        payload = request.get_json(silent=True) or {}
+        query = (payload.get("query") or "").strip()
+        rationale = (payload.get("rationale") or "").strip()
+        max_results = int(payload.get("max_results") or 50)
+
+        if not query:
+            return jsonify({"error": "Please provide a search query."}), 400
+
+        max_results = max(25, min(50, max_results))
+
+        try:
+            result = build_cluster_payload(query, rationale, max_results=max_results)
+            return jsonify(result)
+        except Exception as exc:
+            return jsonify({"error": str(exc)}), 500
+
+    return app
+
 # -----------------------------
 # MAIN PIPELINE
 # ---------------------------
@@ -363,5 +456,25 @@ if __name__ == "__main__":
         action="store_true",
         help="Skip UMAP cluster visualization window"
     )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Run Veridian as a webpage"
+    )
+    parser.add_argument(
+        "--host",
+        default="127.0.0.1",
+        help="Host for web mode"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port for web mode"
+    )
     args = parser.parse_args()
-    main(no_plot=args.no_plot)
+    if args.web:
+        app = create_web_app()
+        app.run(host=args.host, port=args.port, debug=False)
+    else:
+        main(no_plot=args.no_plot)

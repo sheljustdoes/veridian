@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>veridian.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Lora:ital,wght@0,400;0,500;1,400&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root {
+      --veridian-bg: #2e5a45;
+      --cream: #f5f1eb;
+      --parchment: #eae4d9;
+      --warm-taupe: #c8bfb0;
+      --charcoal: #1e1c1a;
+      --near-black: #141210;
+      --terracotta: #d4603a;
+      --amber: #e8a830;
+      --blush: #e8b4a2;
+      --indigo: #3a4d8f;
+      --forest: #2e5a45;
+      --dusty-blue: #7a8fb5;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      background: var(--veridian-bg);
+      color: var(--cream);
+      font-family: "Lora", Georgia, serif;
+      line-height: 1.6;
+    }
+
+    .shell {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 3rem;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2.5rem;
+      border-bottom: 1px solid rgba(245, 241, 235, 0.2);
+      padding-bottom: 1rem;
+    }
+
+    .brand {
+      font-family: "DM Mono", monospace;
+      letter-spacing: 0.08em;
+      font-size: 0.85rem;
+      color: var(--blush);
+      text-transform: lowercase;
+    }
+
+    .status {
+      font-family: "DM Mono", monospace;
+      font-size: 0.78rem;
+      color: var(--warm-taupe);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+      margin-bottom: 2rem;
+    }
+
+    .hero h1 {
+      font-family: "Outfit", sans-serif;
+      font-size: clamp(2.2rem, 5vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+    }
+
+    .hero h1 em {
+      font-family: "Lora", serif;
+      color: var(--amber);
+      font-style: italic;
+      font-weight: 400;
+    }
+
+    .hero p {
+      max-width: 760px;
+      color: var(--parchment);
+    }
+
+    .search-card {
+      background: rgba(20, 18, 16, 0.34);
+      border: 1px solid rgba(245, 241, 235, 0.24);
+      padding: 1rem;
+      display: grid;
+      gap: 0.9rem;
+    }
+
+    .label {
+      font-family: "DM Mono", monospace;
+      font-size: 0.72rem;
+      color: var(--warm-taupe);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.35rem;
+      display: block;
+    }
+
+    input, textarea {
+      width: 100%;
+      border: 1px solid rgba(245, 241, 235, 0.26);
+      background: rgba(245, 241, 235, 0.95);
+      color: var(--near-black);
+      padding: 0.75rem 0.8rem;
+      font-size: 0.95rem;
+      font-family: "Lora", serif;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 110px;
+      resize: vertical;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 170px;
+      gap: 0.9rem;
+    }
+
+    .btn {
+      border: 1px solid var(--indigo);
+      background: var(--indigo);
+      color: #fff;
+      font-family: "DM Mono", monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      font-size: 0.74rem;
+      padding: 0.75rem 1rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover {
+      background: var(--terracotta);
+      border-color: var(--terracotta);
+    }
+
+    .loading {
+      margin-top: 1rem;
+      display: none;
+      gap: 0.75rem;
+      align-items: center;
+      font-family: "DM Mono", monospace;
+      font-size: 0.8rem;
+      color: var(--parchment);
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 2px solid rgba(245, 241, 235, 0.25);
+      border-top-color: var(--amber);
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .error {
+      margin-top: 0.8rem;
+      color: var(--amber);
+      font-family: "DM Mono", monospace;
+      font-size: 0.8rem;
+      display: none;
+    }
+
+    .results {
+      margin-top: 2rem;
+      display: none;
+      gap: 1rem;
+    }
+
+    .summary-bar {
+      background: rgba(46, 90, 69, 0.28);
+      border: 1px solid rgba(46, 90, 69, 0.8);
+      padding: 0.85rem 1rem;
+      font-family: "DM Mono", monospace;
+      font-size: 0.82rem;
+      color: var(--cream);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    #plot {
+      width: 100%;
+      height: 520px;
+      border: 1px solid rgba(245, 241, 235, 0.2);
+      background: rgba(20, 18, 16, 0.42);
+    }
+
+    .cluster-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 0.85rem;
+    }
+
+    .cluster-card {
+      background: rgba(245, 241, 235, 0.94);
+      color: var(--near-black);
+      border-top: 4px solid var(--terracotta);
+      padding: 0.95rem;
+    }
+
+    .cluster-card h3 {
+      font-family: "Outfit", sans-serif;
+      font-size: 1rem;
+      margin-bottom: 0.3rem;
+    }
+
+    .cluster-card .meta {
+      font-family: "DM Mono", monospace;
+      color: var(--indigo);
+      font-size: 0.74rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .cluster-card p {
+      font-size: 0.9rem;
+      margin-bottom: 0.7rem;
+      color: var(--charcoal);
+      white-space: pre-wrap;
+    }
+
+    .cluster-card ul {
+      margin-left: 1rem;
+      font-size: 0.86rem;
+    }
+
+    .cluster-card li {
+      margin-bottom: 0.35rem;
+    }
+
+    .footer {
+      margin-top: 2rem;
+      font-family: "DM Mono", monospace;
+      font-size: 0.72rem;
+      color: var(--warm-taupe);
+      letter-spacing: 0.08em;
+    }
+
+    @media (max-width: 860px) {
+      .form-row { grid-template-columns: 1fr; }
+      #plot { height: 420px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <div class="topbar">
+      <div class="brand">veridian.</div>
+      <div class="status">Corpus-grounded cognition</div>
+    </div>
+
+    <section class="hero">
+      <h1>Connect <em>research terrain</em> before conclusions.</h1>
+      <p>
+        Enter a research term and the reasoning behind why this search matters.
+        Veridian retrieves literature, groups it into clusters, and embeds the landscape directly in this page.
+      </p>
+    </section>
+
+    <section class="search-card">
+      <div>
+        <label class="label" for="query">Search Term</label>
+        <input id="query" type="text" placeholder="e.g. microplastic exposure in urban air" />
+      </div>
+
+      <div>
+        <label class="label" for="rationale">Why this search? (your justification)</label>
+        <textarea id="rationale" placeholder="Explain your reasoning so the clustering summary can reflect your framing..."></textarea>
+      </div>
+
+      <div class="form-row">
+        <div>
+          <label class="label" for="maxResults">Result Count (25-50)</label>
+          <input id="maxResults" type="number" min="25" max="50" value="50" />
+        </div>
+        <button id="submit" class="btn">Map literature</button>
+      </div>
+
+      <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <span>Building corpus map... embedding, clustering, and summarizing documents.</span>
+      </div>
+
+      <div id="error" class="error"></div>
+    </section>
+
+    <section id="results" class="results">
+      <div id="summaryBar" class="summary-bar"></div>
+      <div id="plot"></div>
+      <div id="clusterGrid" class="cluster-grid"></div>
+    </section>
+
+    <div class="footer">veridian. · structured epistemic reflection</div>
+  </main>
+
+  <script>
+    const palette = ["#3A4D8F", "#D4603A", "#E8A830", "#2E5A45", "#7A8FB5", "#E8B4A2"];
+
+    const queryInput = document.getElementById("query");
+    const rationaleInput = document.getElementById("rationale");
+    const maxResultsInput = document.getElementById("maxResults");
+    const submitButton = document.getElementById("submit");
+    const loadingNode = document.getElementById("loading");
+    const errorNode = document.getElementById("error");
+    const resultsNode = document.getElementById("results");
+    const summaryBar = document.getElementById("summaryBar");
+    const clusterGrid = document.getElementById("clusterGrid");
+
+    const showLoading = (value) => {
+      loadingNode.style.display = value ? "flex" : "none";
+      submitButton.disabled = value;
+      submitButton.style.opacity = value ? "0.6" : "1";
+    };
+
+    const showError = (message) => {
+      if (!message) {
+        errorNode.style.display = "none";
+        errorNode.textContent = "";
+        return;
+      }
+      errorNode.style.display = "block";
+      errorNode.textContent = message;
+    };
+
+    const parseClusterSummary = (summaryText) => {
+      if (!summaryText) return { title: "Cluster", body: "No summary returned." };
+      const titleMatch = summaryText.match(/Title:\s*(.*)/i);
+      const summaryMatch = summaryText.match(/Summary:\s*([\s\S]*)/i);
+      return {
+        title: titleMatch ? titleMatch[1].trim() : "Cluster",
+        body: summaryMatch ? summaryMatch[1].trim() : summaryText.trim()
+      };
+    };
+
+    const renderPlot = (points) => {
+      const grouped = new Map();
+
+      points.forEach((point) => {
+        if (!grouped.has(point.cluster)) {
+          grouped.set(point.cluster, []);
+        }
+        grouped.get(point.cluster).push(point);
+      });
+
+      const traces = Array.from(grouped.entries()).map(([clusterId, items], index) => ({
+        x: items.map((item) => item.x),
+        y: items.map((item) => item.y),
+        text: items.map((item) => item.title),
+        mode: "markers",
+        name: `Cluster ${clusterId}`,
+        marker: {
+          size: 10,
+          color: palette[index % palette.length],
+          line: { color: "#F5F1EB", width: 0.8 }
+        },
+        hovertemplate: "%{text}<extra></extra>"
+      }));
+
+      const layout = {
+        paper_bgcolor: "rgba(0,0,0,0)",
+        plot_bgcolor: "rgba(20,18,16,0.2)",
+        margin: { t: 22, r: 22, b: 44, l: 44 },
+        font: { family: "DM Mono, monospace", color: "#F5F1EB", size: 12 },
+        xaxis: {
+          title: "UMAP-1",
+          gridcolor: "rgba(245,241,235,0.12)",
+          zerolinecolor: "rgba(245,241,235,0.18)"
+        },
+        yaxis: {
+          title: "UMAP-2",
+          gridcolor: "rgba(245,241,235,0.12)",
+          zerolinecolor: "rgba(245,241,235,0.18)"
+        },
+        legend: {
+          orientation: "h",
+          x: 0,
+          y: 1.12,
+          bgcolor: "rgba(0,0,0,0)"
+        }
+      };
+
+      Plotly.newPlot("plot", traces, layout, { responsive: true, displayModeBar: false });
+    };
+
+    const renderClusters = (clusters) => {
+      clusterGrid.innerHTML = "";
+      clusters.forEach((cluster, index) => {
+        const parsed = parseClusterSummary(cluster.summary);
+        const card = document.createElement("article");
+        card.className = "cluster-card";
+        card.style.borderTopColor = palette[index % palette.length];
+
+        const docs = cluster.documents
+          .slice(0, 4)
+          .map((doc) => `<li>${doc.title}${doc.year ? ` (${doc.year})` : ""}</li>`)
+          .join("");
+
+        card.innerHTML = `
+          <h3>${parsed.title}</h3>
+          <div class="meta">Cluster ${cluster.id} · ${cluster.count} documents</div>
+          <p>${parsed.body}</p>
+          <ul>${docs}</ul>
+        `;
+
+        clusterGrid.appendChild(card);
+      });
+    };
+
+    const runSearch = async () => {
+      const query = queryInput.value.trim();
+      const rationale = rationaleInput.value.trim();
+      const maxResults = Number(maxResultsInput.value || 50);
+
+      if (!query) {
+        showError("Please enter a search term.");
+        return;
+      }
+
+      showError("");
+      showLoading(true);
+      resultsNode.style.display = "none";
+
+      try {
+        const response = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, rationale, max_results: maxResults })
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error || "Search failed.");
+        }
+
+        summaryBar.innerHTML = `
+          <span>Query: ${data.query}</span>
+          <span>Docs: ${data.total_documents}</span>
+          <span>Clusters: ${data.clusters.length}</span>
+          <span>Rationale: ${data.rationale ? "included" : "none"}</span>
+        `;
+
+        renderPlot(data.points || []);
+        renderClusters(data.clusters || []);
+        resultsNode.style.display = "grid";
+      } catch (error) {
+        showError(error.message || "Something went wrong while building the cluster map.");
+      } finally {
+        showLoading(false);
+      }
+    };
+
+    submitButton.addEventListener("click", runSearch);
+    queryInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        runSearch();
+      }
+    });
+  </script>
+</body>
+</html>

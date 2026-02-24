@@ -131,3 +131,38 @@ Core pipeline implemented:
 * Basic visualization
 
 This repository represents the structural foundation.
+
+---
+
+## Web Experience (New)
+
+The project now includes a webpage mode with the following flow:
+
+1. Enter a research search term.
+2. Add your reasoning/justification for the search.
+3. See a loading state while Veridian retrieves, embeds, and clusters documents.
+4. View an embedded, interactive cluster map and grouped cluster summaries.
+
+### Run the webpage
+
+Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+Run:
+
+```bash
+python veridian.py --web --host 127.0.0.1 --port 8000
+```
+
+Then open:
+
+`http://127.0.0.1:8000`
+
+### Notes
+
+* Web mode still requires `OPENAI_API_KEY` in `.env` (or environment).
+* Search results are constrained to 25-50 PubMed records per run.
+* Retrieved abstracts are persisted to `corpus.json`.
