@@ -91,6 +91,14 @@
       color: var(--parchment);
     }
 
+    .mode-note {
+      max-width: 760px;
+      font-family: "DM Mono", monospace;
+      font-size: 0.76rem;
+      letter-spacing: 0.03em;
+      color: var(--warm-taupe);
+    }
+
     .search-card {
       background: rgba(20, 18, 16, 0.34);
       border: 1px solid rgba(245, 241, 235, 0.24);
@@ -274,6 +282,7 @@
         Enter a research term and the reasoning behind why this search matters.
         Veridian retrieves literature, groups it into clusters, and embeds the landscape directly in this page.
       </p>
+      <p id="modeNote" class="mode-note"></p>
     </section>
 
     <section class="search-card">
@@ -328,16 +337,18 @@
       const stored = localStorage.getItem(storageKey);
       return stored ? stored.replace(/\/+$/, "") : "";
     })();
-    const IS_GITHUB_PAGES = window.location.hostname.endsWith("github.io");
     const FORCE_PORTFOLIO = params.get("portfolio") === "1";
     const FORCE_LIVE = params.get("live") === "1";
-    const PORTFOLIO_MODE = FORCE_PORTFOLIO || (!FORCE_LIVE && (IS_GITHUB_PAGES || !API_BASE));
+    const LIVE_MODE = FORCE_LIVE && Boolean(API_BASE);
+    const LIVE_REQUESTED_WITHOUT_API_BASE = FORCE_LIVE && !API_BASE;
+    const PORTFOLIO_MODE = FORCE_PORTFOLIO || !LIVE_MODE;
 
     const queryInput = document.getElementById("query");
     const rationaleInput = document.getElementById("rationale");
     const maxResultsInput = document.getElementById("maxResults");
     const submitButton = document.getElementById("submit");
     const statusText = document.getElementById("statusText");
+    const modeNote = document.getElementById("modeNote");
     const loadingNode = document.getElementById("loading");
     const errorNode = document.getElementById("error");
     const resultsNode = document.getElementById("results");
@@ -349,6 +360,12 @@
       maxResultsInput.disabled = true;
       maxResultsInput.value = 30;
       maxResultsInput.title = "Disabled in portfolio mode";
+      modeNote.textContent = LIVE_REQUESTED_WITHOUT_API_BASE
+        ? "Demo-first mode is active. Live mode was requested, but no apiBase is configured."
+        : "Demo-first mode is active for reliability in portfolio reviews. Add ?apiBase=<backend-url>&live=1 to enable live retrieval.";
+    } else {
+      statusText.textContent = "Live mode · backend retrieval enabled";
+      modeNote.textContent = "Live mode is enabled using your configured backend API.";
     }
 
     const showLoading = (value) => {

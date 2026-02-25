@@ -40,10 +40,16 @@ def load_environment():
 
 load_environment()
 
-if not os.getenv("OPENAI_API_KEY"):
-    raise RuntimeError("OPENAI_API_KEY not found. Add it to .env/.ENV or export it in your shell.")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+client = OpenAI(api_key=OPENAI_API_KEY) if OPENAI_API_KEY else None
 
-client = OpenAI()
+
+def require_openai_client():
+    if client is None:
+        raise RuntimeError(
+            "OPENAI_API_KEY not found. Live retrieval mode requires OpenAI. "
+            "Use portfolio/static mode in the frontend, or set OPENAI_API_KEY in .env/.ENV."
+        )
 
 # -----------------------------
 # LOAD CORPUS
@@ -306,6 +312,8 @@ def prompt_max_results(min_results=25, max_results=50, default=50):
 
 
 def build_cluster_payload(query, rationale, max_results=50, n_clusters=N_CLUSTERS):
+    require_openai_client()
+
     pmids = search_pubmed(query, max_results)
     if not pmids:
         raise ValueError("No PubMed records found for that query.")
@@ -392,6 +400,13 @@ def create_web_app():
 # MAIN PIPELINE
 # ---------------------------
 def main(no_plot=False):
+    if client is None:
+        print(
+            "OPENAI_API_KEY not found. CLI analysis mode requires OpenAI. "
+            "For demo website mode, open index.html directly (portfolio mode)."
+        )
+        return
+
     query = input("Enter PubMed search query:\n")
     max_results = prompt_max_results()
 

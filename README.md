@@ -145,6 +145,21 @@ The project now includes a webpage mode with the following flow:
 
 ### Run the webpage
 
+For a pseudo-static interactive demo (no API key, no backend), just open `index.html` in your browser.
+
+Optional local static server:
+
+```bash
+cd /Users/shel/Github/veridian
+python -m http.server 8000
+```
+
+Then open:
+
+`http://127.0.0.1:8000`
+
+### Run live backend mode (optional)
+
 Install dependencies:
 
 ```bash
@@ -163,7 +178,8 @@ Then open:
 
 ### Notes
 
-* Web mode still requires `OPENAI_API_KEY` in `.env` (or environment).
+* Static portfolio/demo mode does **not** require `OPENAI_API_KEY`.
+* Live backend retrieval mode requires `OPENAI_API_KEY` in `.env` (or environment).
 * Search results are constrained to 25-50 PubMed records per run.
 * Retrieved abstracts are persisted to `corpus.json`.
 
@@ -177,6 +193,13 @@ Use a split deployment:
 
 1. **Frontend** (`index.html`) on GitHub Pages.
 2. **Backend** (`veridian.py`) on a Python host (Render, Railway, Fly.io, etc.).
+
+### Quick deployment checklist
+
+1. Create a GitHub repo for this folder and push your code.
+2. Deploy backend with `OPENAI_API_KEY` configured.
+3. Enable GitHub Pages deployment for the frontend.
+4. Open your GitHub Pages URL with `apiBase=<your_backend_url>`.
 
 ### 1) Deploy backend (example start command)
 
@@ -192,11 +215,18 @@ OPENAI_API_KEY=your_key_here
 
 ### 2) Publish frontend to GitHub Pages
 
-Push this repo to GitHub, then enable Pages:
+This repository now includes an automated Pages workflow:
+
+`/.github/workflows/deploy-pages.yml`
+
+After you push to `main`, GitHub Actions deploys `index.html` automatically.
+
+One-time GitHub setup:
 
 * **Settings → Pages**
-* **Build and deployment → Source: Deploy from a branch**
-* Select branch (for example `main`) and folder (`/ (root)`)
+* **Build and deployment → Source: GitHub Actions**
+
+If your default branch is not `main`, update `branches: [main]` in the workflow file.
 
 ### 3) Connect Pages frontend to backend API
 
@@ -207,6 +237,18 @@ https://<your-username>.github.io/<repo>/?apiBase=https://<your-backend-domain>
 ```
 
 The frontend stores this value and uses it for `/api/search` requests.
+
+### 4) First push commands (if needed)
+
+```bash
+cd /Users/shel/Github/veridian
+git init
+git add .
+git commit -m "Initial veridian deploy setup"
+git branch -M main
+git remote add origin https://github.com/<your-username>/<repo>.git
+git push -u origin main
+```
 
 ### Portfolio mode (neutered functionality)
 
@@ -219,8 +261,8 @@ For portfolio/public website use, the frontend now supports a built-in **portfol
 
 Behavior:
 
-* On `github.io`, portfolio mode is enabled automatically unless `live=1` is set.
-* If no `apiBase` is configured, portfolio mode is also used.
+* Portfolio mode is enabled by default unless both `live=1` and `apiBase` are set.
+* This keeps the site pseudo-static by default on localhost and GitHub Pages.
 
 Useful URLs:
 
