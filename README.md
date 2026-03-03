@@ -58,6 +58,9 @@ veridian. is built on five principles:
    The user remains the final arbiter.
    veridian. provides structure, not authority.
 
+6. **Context Engineering Over Prompting**
+   veridian structures retrieval, claims, entities, and graph relationships so downstream reasoning is grounded in explicit context.
+
 ---
 
 ## What veridian. Does (Current Prototype)
@@ -70,9 +73,93 @@ veridian. is built on five principles:
 6. Accepts free-form explanation from the user.
 7. Extracts atomic claims.
 8. Maps claims to corpus clusters.
-9. Reflects alignment and unsupported statements.
+9. Extracts named entities (concepts, methods, authors, institutions) from claims.
+10. Resolves entities into canonical graph nodes (entity resolution).
+11. Builds a knowledge graph where cluster nodes are linked by semantic similarity and entity nodes connect to aligned clusters.
+12. Reflects alignment and unsupported statements.
+
+---
+
+## Technical Architecture (Context Engineering)
+
+veridian now uses explicit context-engineering primitives:
+
+* **Ontology-oriented node model**
+   The graph schema includes typed nodes: `cluster` and `entity` (with entity subtypes such as concept, method, author, institution).
+
+* **Knowledge graph layer**
+   Cluster embeddings are converted into explicit graph edges when centroid similarity exceeds a threshold.
+   This makes latent vector relationships queryable as structured relational knowledge.
+
+* **Entity extraction + entity resolution**
+   Atomic claims are parsed for named entities, then normalized/deduplicated into canonical entities with aliases and mention counts.
+
+* **Claim-to-graph grounding**
+   Claims are first aligned to clusters; entities inherit that alignment and are linked to the relevant cluster nodes.
+
+* **Context engineering loop**
+   Retrieval → embeddings → clusters → claims → entities → graph.
+   Each stage constrains the next stage with corpus-grounded context rather than unconstrained generation.
 
 This is a structural prototype, not a finished product.
+
+---
+
+## Capability Translation: Semantic Modeling and Context Engineering
+
+This project is intentionally framed as an **AI-first context architecture** system, not only an NLP demo.
+It demonstrates how semantic modeling and context engineering can improve downstream model behavior, retrieval quality, and interpretability in high-dimensional scientific domains.
+
+### Semantic architecture & AI-first context modeling
+
+* **Enterprise-style semantic representation (prototype scope)**
+   veridian defines typed domain entities (`cluster`, `entity`) and explicit relationships (semantic similarity, claim-grounded entity linkage) as a reusable semantic layer for AI consumption.
+
+* **Domain-entity modeling posture (life-sciences aligned)**
+   The same schema pattern is designed to extend to enterprise healthcare concepts such as payer, provider, patient, product, site, and indication, with explicit relationship contracts for AI reasoning.
+
+* **Semantic schema / ontology patterns**
+   The graph model captures entities, relationship types, and constraints (thresholded similarity, cluster-aligned entity links), forming a lightweight ontology foundation that can evolve toward formal RDF/OWL exports.
+
+* **Context engineering standards (implemented pattern)**
+   The pipeline enforces a consistent context path:
+   retrieval → embedding → clustering → claim extraction → entity resolution → graph grounding → reflective output.
+   This pattern is designed so models operate on explicit, structured context instead of unconstrained prompts.
+
+* **Prompt/tool/memory/retrieval shaping**
+   Outputs are structured for AI consumption as grounded claims, aligned entities, and graph relationships, establishing a basis for prompt assembly, tool orchestration, session memory, retrieval indices, and structured downstream outputs.
+
+### Feature engineering & model performance orientation
+
+* **Feature-centric design**
+   Core features include embedding vectors, cluster centroids, claim-cluster similarity scores, entity mention counts, and graph edge weights.
+
+* **Model reliability framing**
+   Claim alignment thresholds function as an initial guardrail against unsupported statements, with clear extension points for leakage checks, stability monitoring, and explainability instrumentation.
+
+### Context-aware ML / GenAI / RL-informed system thinking
+
+* **Context-aware GenAI integration**
+   LLM calls are constrained by corpus-derived structure (cluster and claim context), and outputs are normalized into typed artifacts (claims/entities) for downstream reasoning.
+
+* **RL-informed roadmap alignment**
+   The architecture supports future reward signals such as grounding coverage, semantic consistency, and interpretive diversity to guide ranking/orchestration decisions.
+
+### Retrieval, knowledge, memory, and governance foundations
+
+* **Retrieval + knowledge graph hybrid**
+   veridian combines vector retrieval structure (embeddings/clusters) with explicit relational knowledge (graph edges), making both similarity and topology queryable.
+
+* **Semantic quality gate trajectory**
+   The current system surfaces grounding confidence and unsupported claims; next quality gates are entity completeness, relationship validity, and taxonomy drift detection.
+
+### Cross-functional translation value
+
+* **Roadmap-ready decomposition**
+   The architecture cleanly separates retrieval, semantic modeling, reasoning context, and reflective outputs, making it straightforward to partner with engineering, product, and governance stakeholders on productionization.
+
+* **Program-ready communication artifact**
+   This README is structured to communicate semantic definitions, context standards, reliability tradeoffs, and implementation maturity in language used by enterprise AI programs.
 
 ---
 
@@ -127,6 +214,8 @@ Core pipeline implemented:
 * Embedding
 * Clustering
 * Claim extraction
+* Entity extraction + entity resolution
+* Knowledge graph construction
 * Alignment reflection
 * Basic visualization
 
@@ -140,7 +229,7 @@ The project now includes a webpage mode with the following flow:
 
 1. Enter a research search term.
 2. Add your reasoning/justification for the search.
-3. See a loading state while Veridian retrieves, embeds, and clusters documents.
+3. See a loading state while veridian retrieves, embeds, and clusters documents.
 4. View an embedded, interactive cluster map and grouped cluster summaries.
 
 ### Run the webpage
@@ -180,14 +269,14 @@ Then open:
 
 * Static portfolio/demo mode does **not** require `OPENAI_API_KEY`.
 * Live backend retrieval mode requires `OPENAI_API_KEY` in `.env` (or environment).
-* Search results are constrained to 25-50 PubMed records per run.
+* Search results are constrained to 25-120 PubMed records per run (default 100).
 * Retrieved abstracts are persisted to `corpus.json`.
 
 ---
 
 ## Deploy on GitHub Pages
 
-GitHub Pages can only host static files. Veridian needs a Python backend for PubMed + OpenAI calls.
+GitHub Pages can only host static files. veridian needs a Python backend for PubMed + OpenAI calls.
 
 Use a split deployment:
 

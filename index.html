@@ -10,16 +10,21 @@
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   <style>
     :root {
-      --veridian-bg: #2e5a45;
-      --cream: #f5f1eb;
-      --parchment: #eae4d9;
-      --warm-taupe: #c8bfb0;
+      --ink: #141210;
       --charcoal: #1e1c1a;
+      --veridian-bg: #2e5a45;
+      --cream: #eae4d9;
+      --parchment: #c4d0b8;
+      --warm-taupe: #c8bfb0;
       --near-black: #141210;
       --terracotta: #d4603a;
       --amber: #e8a830;
       --blush: #e8b4a2;
+      --rose-dust: #d4896e;
+      --sage: #7a8c6e;
+      --sage-pale: #c4d0b8;
       --indigo: #3a4d8f;
+      --indigo-pale: #b8c0cd;
       --forest: #2e5a45;
       --dusty-blue: #7a8fb5;
     }
@@ -35,7 +40,8 @@
     }
 
     .shell {
-      max-width: 1200px;
+      width: 100%;
+      max-width: none;
       margin: 0 auto;
       padding: 2rem 1.5rem 3rem;
     }
@@ -139,6 +145,22 @@
       gap: 0.9rem;
     }
 
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: "DM Mono", monospace;
+      font-size: 0.76rem;
+      color: var(--warm-taupe);
+      letter-spacing: 0.03em;
+    }
+
+    .toggle-row input[type="checkbox"] {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--indigo);
+    }
+
     .btn {
       border: 1px solid var(--indigo);
       background: var(--indigo);
@@ -155,6 +177,17 @@
     .btn:hover {
       background: var(--terracotta);
       border-color: var(--terracotta);
+    }
+
+    .btn-secondary {
+      border: 1px solid rgba(245, 241, 235, 0.35);
+      background: transparent;
+      color: var(--cream);
+    }
+
+    .btn-secondary:hover {
+      background: rgba(245, 241, 235, 0.12);
+      border-color: rgba(245, 241, 235, 0.55);
     }
 
     .loading {
@@ -209,14 +242,18 @@
     #plot {
       width: 100%;
       height: 520px;
-      border: 1px solid rgba(245, 241, 235, 0.2);
-      background: rgba(20, 18, 16, 0.42);
+      border: 1px solid rgba(245, 241, 235, 0.28);
+      background: transparent;
     }
 
     .cluster-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
       gap: 0.85rem;
+    }
+
+    .insight-panel {
+      margin-top: 0.35rem;
     }
 
     .cluster-card {
@@ -253,6 +290,17 @@
 
     .cluster-card li {
       margin-bottom: 0.35rem;
+    }
+
+    .doc-title {
+      font-weight: 600;
+    }
+
+    .doc-snippet {
+      font-size: 0.8rem;
+      line-height: 1.45;
+      color: rgba(30, 28, 26, 0.82);
+      margin-top: 0.18rem;
     }
 
     .footer {
@@ -298,11 +346,18 @@
 
       <div class="form-row">
         <div>
-          <label class="label" for="maxResults">Result Count (25-50)</label>
-          <input id="maxResults" type="number" min="25" max="50" value="50" />
+          <label class="label" for="maxResults">Result Count (25-120)</label>
+          <input id="maxResults" type="number" min="25" max="120" value="100" />
         </div>
         <button id="submit" class="btn">Map literature</button>
       </div>
+
+      <button id="prefillDemo" class="btn btn-secondary" type="button">Use recommended demo query</button>
+
+      <label id="lockedToggleRow" class="toggle-row" style="display:none;">
+        <input id="lockedDemoToggle" type="checkbox" />
+        <span>Use locked demo dataset</span>
+      </label>
 
       <div id="loading" class="loading">
         <div class="spinner"></div>
@@ -316,13 +371,30 @@
       <div id="summaryBar" class="summary-bar"></div>
       <div id="plot"></div>
       <div id="clusterGrid" class="cluster-grid"></div>
+      <div id="insightPanel" class="insight-panel"></div>
     </section>
 
     <div class="footer">veridian. · structured epistemic reflection</div>
   </main>
 
   <script>
-    const palette = ["#3A4D8F", "#D4603A", "#E8A830", "#2E5A45", "#7A8FB5", "#E8B4A2"];
+    const palette = ["#3A4D8F", "#D4603A", "#E8A830", "#2E5A45", "#7A8FB5", "#D4896E", "#C4D0B8"];
+    const brand = {
+      ink: "#141210",
+      charcoal: "#1E1C1A",
+      cream: "#EAE4D9",
+      taupe: "#C8BFB0",
+      terra: "#D4603A",
+      blush: "#E8B4A2",
+      roseDust: "#D4896E",
+      amber: "#E8A830",
+      sage: "#7A8C6E",
+      sagePale: "#C4D0B8",
+      indigo: "#3A4D8F",
+      indigoPale: "#B8C0CD",
+      dustyBlue: "#7A8FB5",
+      forest: "#2E5A45"
+    };
     const params = new URLSearchParams(window.location.search);
     const API_BASE = (() => {
       const queryBase = params.get("apiBase");
@@ -339,6 +411,9 @@
     })();
     const FORCE_PORTFOLIO = params.get("portfolio") === "1";
     const FORCE_LIVE = params.get("live") === "1";
+    const LOCKED_PARAM = params.get("locked");
+    const FORCE_LOCKED_DEMO = LOCKED_PARAM === "1";
+    const FORCE_EDITABLE_DEMO = LOCKED_PARAM === "0";
     const LIVE_MODE = FORCE_LIVE && Boolean(API_BASE);
     const LIVE_REQUESTED_WITHOUT_API_BASE = FORCE_LIVE && !API_BASE;
     const PORTFOLIO_MODE = FORCE_PORTFOLIO || !LIVE_MODE;
@@ -347,6 +422,7 @@
     const rationaleInput = document.getElementById("rationale");
     const maxResultsInput = document.getElementById("maxResults");
     const submitButton = document.getElementById("submit");
+    const prefillDemoButton = document.getElementById("prefillDemo");
     const statusText = document.getElementById("statusText");
     const modeNote = document.getElementById("modeNote");
     const loadingNode = document.getElementById("loading");
@@ -354,18 +430,60 @@
     const resultsNode = document.getElementById("results");
     const summaryBar = document.getElementById("summaryBar");
     const clusterGrid = document.getElementById("clusterGrid");
+    const insightPanel = document.getElementById("insightPanel");
+    const lockedToggleRow = document.getElementById("lockedToggleRow");
+    const lockedDemoToggle = document.getElementById("lockedDemoToggle");
+
+    const RECOMMENDED_DEMO_QUERY = '("aging" OR frailty OR longevity) AND ("inflammaging" OR "immune aging" OR "gut microbiome" OR "mitochondrial dysfunction" OR senescence)';
+    const RECOMMENDED_DEMO_RATIONALE = "Human-centric biology map: compare dominant and emerging interpretations across inflammaging, senescence, immune remodeling, microbiome-host interactions, and intervention hypotheses.";
+
+    const syncPortfolioLockState = () => {
+      if (!PORTFOLIO_MODE || !lockedDemoToggle) return;
+
+      const locked = lockedDemoToggle.checked;
+      queryInput.disabled = locked;
+      rationaleInput.disabled = locked;
+      maxResultsInput.disabled = locked;
+      maxResultsInput.title = locked
+        ? "Disabled while locked dataset is enabled"
+        : "Choose how many demo documents to simulate";
+
+      if (!maxResultsInput.value) {
+        maxResultsInput.value = "100";
+      }
+
+      if (locked) {
+        queryInput.value = "Locked demo dataset";
+        queryInput.title = "Portfolio mode is using a fixed dataset";
+        rationaleInput.placeholder = "Locked mode uses a fixed, precomputed corpus map.";
+      } else {
+        if (queryInput.value.trim().toLowerCase() === "locked demo dataset") {
+          queryInput.value = "";
+        }
+        queryInput.title = "";
+        rationaleInput.placeholder = "Explain your reasoning so the clustering summary can reflect your framing...";
+      }
+    };
 
     if (PORTFOLIO_MODE) {
       statusText.textContent = "Portfolio mode · live retrieval disabled";
-      maxResultsInput.disabled = true;
-      maxResultsInput.value = 30;
-      maxResultsInput.title = "Disabled in portfolio mode";
+      maxResultsInput.value = maxResultsInput.value || "100";
+
+      lockedToggleRow.style.display = "flex";
+      lockedDemoToggle.checked = FORCE_LOCKED_DEMO || !FORCE_EDITABLE_DEMO;
+      syncPortfolioLockState();
+
       modeNote.textContent = LIVE_REQUESTED_WITHOUT_API_BASE
         ? "Demo-first mode is active. Live mode was requested, but no apiBase is configured."
-        : "Demo-first mode is active for reliability in portfolio reviews. Add ?apiBase=<backend-url>&live=1 to enable live retrieval.";
+        : "Demo-first mode is active with the real locked payload by default. Turn off the toggle for synthetic editable demo maps. Add ?locked=0 to default editable mode, or ?apiBase=<backend-url>&live=1 for live retrieval.";
+
+      if (!lockedDemoToggle.checked) {
+        queryInput.placeholder = RECOMMENDED_DEMO_QUERY;
+      }
     } else {
       statusText.textContent = "Live mode · backend retrieval enabled";
       modeNote.textContent = "Live mode is enabled using your configured backend API.";
+      queryInput.placeholder = RECOMMENDED_DEMO_QUERY;
     }
 
     const showLoading = (value) => {
@@ -384,47 +502,203 @@
       errorNode.textContent = message;
     };
 
+    const cleanSummaryText = (value) => (
+      (value || "")
+        .replace(/\r/g, "")
+        .replace(/\*\*/g, "")
+        .replace(/^[\s:.-]+/, "")
+        .trim()
+    );
+
     const parseClusterSummary = (summaryText) => {
       if (!summaryText) return { title: "Cluster", body: "No summary returned." };
-      const titleMatch = summaryText.match(/Title:\s*(.*)/i);
-      const summaryMatch = summaryText.match(/Summary:\s*([\s\S]*)/i);
+
+      const normalized = String(summaryText).replace(/\r/g, "");
+      const titleMatch = normalized.match(/(?:cluster\s+)?title:\s*([^\n]+)/i);
+      const summaryMatch = normalized.match(/summary:\s*([\s\S]*)/i);
+
+      const title = cleanSummaryText(titleMatch ? titleMatch[1] : "");
+      const body = cleanSummaryText(summaryMatch ? summaryMatch[1] : normalized);
+
       return {
-        title: titleMatch ? titleMatch[1].trim() : "Cluster",
-        body: summaryMatch ? summaryMatch[1].trim() : summaryText.trim()
+        title: title || "Cluster",
+        body: body || "No summary returned."
       };
+    };
+
+    const truncateLabel = (text, max = 44) => {
+      const value = String(text || "").trim();
+      if (value.length <= max) return value;
+      return `${value.slice(0, max - 1).trimEnd()}…`;
     };
 
     const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    const buildPortfolioPayload = (query, rationale) => {
+    let lockedDemoPayloadCache = null;
+
+    const loadLockedDemoPayload = async () => {
+      if (lockedDemoPayloadCache) {
+        return lockedDemoPayloadCache;
+      }
+
+      const candidates = [
+        "./demo_payload.json",
+        "./demo_payload_human_aging_200.json",
+        "/demo_payload.json",
+        "/demo_payload_human_aging_200.json",
+        "/static/demo_payload.json",
+        "/static/demo_payload_human_aging_200.json"
+      ];
+
+      for (const candidate of candidates) {
+        try {
+          const response = await fetch(candidate, { cache: "no-store" });
+          if (!response.ok) continue;
+          const payload = await response.json();
+          lockedDemoPayloadCache = payload;
+          return payload;
+        } catch (_error) {
+          // Try next candidate
+        }
+      }
+
+      if (window.location.protocol === "file:") {
+        throw new Error("Locked demo payload cannot be loaded from file://. Start a local server (python veridian.py --web --host 127.0.0.1 --port 8000) and open http://127.0.0.1:8000.");
+      }
+
+      throw new Error("Locked demo payload could not be loaded. Ensure demo_payload.json (or demo_payload_human_aging_200.json) exists at the project root.");
+    };
+
+    const getPortfolioPayload = async (query, rationale, maxResults, useLockedDemo) => {
+      if (!useLockedDemo) {
+        return {
+          ...buildPortfolioPayload(query, rationale, maxResults),
+          __demo_mode: "editable",
+          __payload_source: "synthetic"
+        };
+      }
+
+      if (lockedDemoPayloadCache) {
+        return {
+          ...lockedDemoPayloadCache,
+          query: lockedDemoPayloadCache.query || query,
+          rationale: lockedDemoPayloadCache.rationale || rationale,
+          __demo_mode: "locked",
+          __payload_source: "locked"
+        };
+      }
+
+      const payload = await loadLockedDemoPayload();
+      return {
+        ...payload,
+        query: payload.query || query,
+        rationale: payload.rationale || rationale,
+        __demo_mode: "locked",
+        __payload_source: "locked"
+      };
+    };
+
+    const buildPortfolioPayload = (query, rationale, maxResults) => {
       const topic = query || "research domain";
       const rationaleLine = rationale
         ? ` Your rationale emphasizes: ${rationale}.`
         : "";
 
+      const totalDocuments = Math.max(25, Math.min(120, Number(maxResults || 100)));
+      const cluster0Count = Math.max(1, Math.round(totalDocuments * 0.34));
+      const cluster1Count = Math.max(1, Math.round(totalDocuments * 0.4));
+      const cluster2Count = Math.max(1, totalDocuments - cluster0Count - cluster1Count);
+
+      const clusterCenters = {
+        0: { x: -2.2, y: 1.6 },
+        1: { x: -0.1, y: 0.0 },
+        2: { x: 2.2, y: -0.7 }
+      };
+
+      const seededValue = (seed) => {
+        const raw = Math.sin(seed * 12.9898) * 43758.5453;
+        return raw - Math.floor(raw);
+      };
+
+      const makeClusterPoints = (clusterId, count, titlePrefix) => {
+        const points = [];
+        const center = clusterCenters[clusterId];
+
+        for (let index = 0; index < count; index += 1) {
+          const seedBase = ((clusterId + 1) * 1000) + (index + 1);
+          const jitterX = (seededValue(seedBase) - 0.5) * 1.15;
+          const jitterY = (seededValue(seedBase + 71) - 0.5) * 1.05;
+
+          points.push({
+            x: center.x + jitterX,
+            y: center.y + jitterY,
+            cluster: clusterId,
+            title: `${titlePrefix} paper ${index + 1}`
+          });
+        }
+
+        return points;
+      };
+
       const points = [
-        { x: -2.6, y: 1.8, cluster: 0, title: `${topic}: foundational definitions` },
-        { x: -2.1, y: 1.5, cluster: 0, title: `${topic}: scope and assumptions` },
-        { x: -1.8, y: 2.0, cluster: 0, title: `${topic}: canonical framing thread` },
-        { x: -2.3, y: 1.0, cluster: 0, title: `${topic}: methodological baseline` },
-        { x: -0.4, y: 0.2, cluster: 1, title: `${topic}: dominant empirical findings` },
-        { x: 0.1, y: 0.0, cluster: 1, title: `${topic}: reproducible outcomes` },
-        { x: 0.4, y: 0.3, cluster: 1, title: `${topic}: intervention and application studies` },
-        { x: -0.1, y: -0.3, cluster: 1, title: `${topic}: implementation constraints` },
-        { x: 2.0, y: -0.8, cluster: 2, title: `${topic}: emerging interpretation` },
-        { x: 2.4, y: -1.1, cluster: 2, title: `${topic}: minority viewpoint` },
-        { x: 2.1, y: -0.3, cluster: 2, title: `${topic}: unresolved tension` },
-        { x: 2.7, y: -0.6, cluster: 2, title: `${topic}: future research direction` }
+        ...makeClusterPoints(0, cluster0Count, `${topic}: foundational`),
+        ...makeClusterPoints(1, cluster1Count, `${topic}: dominant evidence`),
+        ...makeClusterPoints(2, cluster2Count, `${topic}: emerging interpretation`)
       ];
 
       return {
+        claims: [
+          `${topic} has strong evidence concentration in one dominant interpretation stream.`,
+          `${topic} contains emerging interpretations that remain underrepresented.`,
+          `${topic} method selection influences observed outcomes.`
+        ],
+        entities: [
+          {
+            id: "entity:0",
+            name: `${topic} dominant interpretation`,
+            type: "concept",
+            mentions: 3,
+            clusters: [{ cluster: 1, mentions: 2 }, { cluster: 2, mentions: 1 }]
+          },
+          {
+            id: "entity:1",
+            name: `${topic} intervention study`,
+            type: "method",
+            mentions: 2,
+            clusters: [{ cluster: 1, mentions: 2 }]
+          },
+          {
+            id: "entity:2",
+            name: "institutional cohort datasets",
+            type: "institution",
+            mentions: 1,
+            clusters: [{ cluster: 2, mentions: 1 }]
+          }
+        ],
+        knowledge_graph: {
+          nodes: [
+            { id: "cluster:0", type: "cluster" },
+            { id: "cluster:1", type: "cluster" },
+            { id: "cluster:2", type: "cluster" },
+            { id: "entity:0", type: "entity" },
+            { id: "entity:1", type: "entity" },
+            { id: "entity:2", type: "entity" }
+          ],
+          edges: [
+            { source: "cluster:0", target: "cluster:1", relation: "semantic_similarity", weight: 0.71 },
+            { source: "cluster:1", target: "cluster:2", relation: "semantic_similarity", weight: 0.62 },
+            { source: "entity:0", target: "cluster:1", relation: "mentioned_in_claims_for_cluster", weight: 2 },
+            { source: "entity:1", target: "cluster:1", relation: "mentioned_in_claims_for_cluster", weight: 1 },
+            { source: "entity:2", target: "cluster:2", relation: "mentioned_in_claims_for_cluster", weight: 1 }
+          ]
+        },
         query,
         rationale,
-        total_documents: 30,
+        total_documents: totalDocuments,
         clusters: [
           {
             id: 0,
-            count: 10,
+            count: cluster0Count,
             summary: `Title: Terrain foundations\nSummary: This cluster maps foundational papers that define ${topic}, including key assumptions, terminology, and boundaries. It is the orientation layer Veridian uses before comparing interpretations.${rationaleLine}`,
             documents: [
               { title: `${topic} conceptual baseline`, year: 2018 },
@@ -435,7 +709,7 @@
           },
           {
             id: 1,
-            count: 12,
+            count: cluster1Count,
             summary: `Title: Dominant evidence stream\nSummary: This cluster captures the dominant empirical thread for ${topic}, emphasizing outcomes, methods, and reproducibility. It reflects where evidence density is strongest in the current landscape.`,
             documents: [
               { title: `${topic} intervention benchmark`, year: 2021 },
@@ -446,7 +720,7 @@
           },
           {
             id: 2,
-            count: 8,
+            count: cluster2Count,
             summary: `Title: Emerging and minority interpretations\nSummary: This cluster surfaces lower-frequency interpretations around ${topic} that challenge dominant assumptions. Veridian highlights this region to support epistemic humility and clarify unresolved debate structure.`,
             documents: [
               { title: `${topic} alternative explanatory model`, year: 2022 },
@@ -460,54 +734,353 @@
       };
     };
 
-    const renderPlot = (points) => {
+    const renderInsights = (data) => {
+      const entities = (data.entities || [])
+        .slice()
+        .sort((a, b) => (b.mentions || 0) - (a.mentions || 0))
+        .slice(0, 8);
+
+      const knowledgeGraph = data.knowledge_graph || { nodes: [], edges: [] };
+      const nodeCount = (knowledgeGraph.nodes || []).length;
+      const edgeCount = (knowledgeGraph.edges || []).length;
+      const entityCount = (data.entities || []).length;
+      const claimCount = (data.claims || []).length;
+
+      const entityRows = entities.length
+        ? entities
+            .map((entity) => `<li>${entity.name} · ${entity.type} · mentions: ${entity.mentions || 0}</li>`)
+            .join("")
+        : "<li>No entities extracted for this run.</li>";
+
+      insightPanel.innerHTML = `
+        <article class="cluster-card">
+          <h3>Knowledge graph layer</h3>
+          <div class="meta">Nodes: ${nodeCount} · Edges: ${edgeCount} · Entities: ${entityCount} · Claims: ${claimCount}</div>
+          <p>Graph outputs are generated from cluster similarity and claim-grounded entity extraction.</p>
+          <ul>${entityRows}</ul>
+        </article>
+      `;
+    };
+
+    const toRgba = (hex, alpha) => {
+      const clean = hex.replace("#", "");
+      const bigint = parseInt(clean, 16);
+      const r = (bigint >> 16) & 255;
+      const g = (bigint >> 8) & 255;
+      const b = bigint & 255;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    };
+
+    const convexHull = (points) => {
+      if (points.length < 3) return points;
+
+      const sorted = [...points].sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+      const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+
+      const lower = [];
+      for (const point of sorted) {
+        while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], point) <= 0) {
+          lower.pop();
+        }
+        lower.push(point);
+      }
+
+      const upper = [];
+      for (let i = sorted.length - 1; i >= 0; i -= 1) {
+        const point = sorted[i];
+        while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], point) <= 0) {
+          upper.pop();
+        }
+        upper.push(point);
+      }
+
+      lower.pop();
+      upper.pop();
+      return lower.concat(upper);
+    };
+
+    const renderSemanticPlot = (data) => {
+      const points = data.points || [];
+      const clusters = data.clusters || [];
+      const entities = data.entities || [];
+      const graph = data.knowledge_graph || { nodes: [], edges: [] };
       const grouped = new Map();
+      const clusterById = new Map(clusters.map((cluster) => [cluster.id, cluster]));
+      const topEntitiesByCluster = new Map();
+
+      entities.forEach((entity) => {
+        (entity.clusters || []).forEach((clusterRef) => {
+          const clusterId = Number(clusterRef.cluster);
+          if (!Number.isInteger(clusterId)) return;
+          if (!topEntitiesByCluster.has(clusterId)) topEntitiesByCluster.set(clusterId, []);
+
+          topEntitiesByCluster.get(clusterId).push({
+            name: entity.name,
+            type: entity.type,
+            mentions: Number(clusterRef.mentions || 0)
+          });
+        });
+      });
+
+      topEntitiesByCluster.forEach((list, clusterId) => {
+        list.sort((a, b) => b.mentions - a.mentions);
+        topEntitiesByCluster.set(clusterId, list.slice(0, 3));
+      });
 
       points.forEach((point) => {
-        if (!grouped.has(point.cluster)) {
-          grouped.set(point.cluster, []);
-        }
+        if (!grouped.has(point.cluster)) grouped.set(point.cluster, []);
         grouped.get(point.cluster).push(point);
       });
 
-      const traces = Array.from(grouped.entries()).map(([clusterId, items], index) => ({
-        x: items.map((item) => item.x),
-        y: items.map((item) => item.y),
-        text: items.map((item) => item.title),
-        mode: "markers",
-        name: `Cluster ${clusterId}`,
-        marker: {
-          size: 10,
-          color: palette[index % palette.length],
-          line: { color: "#F5F1EB", width: 0.8 }
-        },
-        hovertemplate: "%{text}<extra></extra>"
-      }));
+      const centroidByCluster = new Map();
+      grouped.forEach((items, clusterId) => {
+        const sum = items.reduce(
+          (acc, item) => ({ x: acc.x + item.x, y: acc.y + item.y }),
+          { x: 0, y: 0 }
+        );
+        centroidByCluster.set(clusterId, {
+          x: sum.x / items.length,
+          y: sum.y / items.length
+        });
+      });
 
+      const xValues = points.map((point) => point.x);
+      const yValues = points.map((point) => point.y);
+      const xMin = xValues.length ? Math.min(...xValues) : -1;
+      const xMax = xValues.length ? Math.max(...xValues) : 1;
+      const yMin = yValues.length ? Math.min(...yValues) : -1;
+      const yMax = yValues.length ? Math.max(...yValues) : 1;
+      const span = Math.max(xMax - xMin, yMax - yMin, 1.5);
+      const xSpan = Math.max(xMax - xMin, 1);
+      const ySpan = Math.max(yMax - yMin, 1);
+      const orbitRadius = span * 0.18;
+
+      const traces = [];
+      const traceMeta = [];
+      const pushTrace = (trace, meta = {}) => {
+        traces.push(trace);
+        traceMeta.push(meta);
+      };
+
+      const similarityEdges = (graph.edges || []).filter((edge) => (
+        edge.relation === "semantic_similarity"
+        && typeof edge.source === "string"
+        && typeof edge.target === "string"
+        && edge.source.startsWith("cluster:")
+        && edge.target.startsWith("cluster:")
+      ));
+
+      similarityEdges.forEach((edge) => {
+        const sourceId = Number(String(edge.source).split(":")[1]);
+        const targetId = Number(String(edge.target).split(":")[1]);
+        const sourceCentroid = centroidByCluster.get(sourceId);
+        const targetCentroid = centroidByCluster.get(targetId);
+        if (!sourceCentroid || !targetCentroid) return;
+
+        const weight = Number(edge.weight || 0);
+        pushTrace({
+          x: [sourceCentroid.x, targetCentroid.x],
+          y: [sourceCentroid.y, targetCentroid.y],
+          mode: "lines",
+          line: {
+            color: toRgba(brand.indigoPale, 0.62),
+            width: Math.max(1, Math.min(3.4, 0.8 + (weight * 2.2)))
+          },
+          hovertemplate: `Cluster similarity: ${weight.toFixed(2)}<extra></extra>`,
+          showlegend: false
+        }, {
+          kind: "similarity",
+          clusters: [sourceId, targetId]
+        });
+      });
+
+      Array.from(grouped.entries()).forEach(([clusterId, items], index) => {
+        const cluster = clusterById.get(clusterId) || { id: clusterId, count: items.length, summary: "" };
+        const parsedSummary = parseClusterSummary(cluster.summary || "");
+        const centroid = centroidByCluster.get(clusterId);
+        const topEntities = topEntitiesByCluster.get(clusterId) || [];
+
+        pushTrace({
+          x: items.map((item) => item.x),
+          y: items.map((item) => item.y),
+          mode: "markers",
+          marker: {
+            size: 4,
+            color: toRgba(brand.taupe, 0.30),
+            line: { color: toRgba(brand.sagePale, 0.55), width: 0.3 }
+          },
+          text: items.map((item) => item.title),
+          hovertemplate: "%{text}<extra></extra>",
+          showlegend: false
+        }, {
+          kind: "cluster-points",
+          clusterId
+        });
+
+        if (!centroid) return;
+
+        const clusterSize = Math.max(26, Math.min(84, 16 + Math.sqrt(Number(cluster.count || items.length)) * 12));
+        const clusterTitle = parsedSummary.title || `Cluster ${clusterId}`;
+        const legendLabel = `Cluster ${cluster.id}: ${truncateLabel(clusterTitle)}`;
+        const topEntitiesText = topEntities.length
+          ? topEntities.map((entity) => `${entity.name} (${entity.mentions})`).join(", ")
+          : "not available";
+
+        pushTrace({
+          x: [centroid.x],
+          y: [centroid.y],
+          mode: "markers+text",
+          text: [clusterTitle],
+          textposition: "top center",
+          textfont: {
+            family: "Outfit, sans-serif",
+            size: 13,
+            color: brand.cream
+          },
+          marker: {
+            size: clusterSize,
+            color: toRgba(palette[index % palette.length], 0.27),
+            line: { color: brand.cream, width: 2 }
+          },
+          hovertemplate: [
+            `<b>${clusterTitle}</b>`,
+            `Documents: ${cluster.count || items.length}`,
+            `Top entities: ${topEntitiesText}`
+          ].join("<br>") + "<extra></extra>",
+          name: legendLabel,
+          legendgroup: `cluster-${clusterId}`,
+          showlegend: true
+        }, {
+          kind: "cluster-centroid",
+          clusterId
+        });
+
+        const localEntityEdgeX = [];
+        const localEntityEdgeY = [];
+        const localEntityNodeX = [];
+        const localEntityNodeY = [];
+        const localEntityNodeText = [];
+
+        topEntities.forEach((entity, entityIndex) => {
+          const angle = (clusterId * 1.7) + (entityIndex * (Math.PI / 3));
+          const distance = orbitRadius * (1 + (entityIndex * 0.4));
+          const nodeX = centroid.x + (Math.cos(angle) * distance);
+          const nodeY = centroid.y + (Math.sin(angle) * distance);
+
+          localEntityEdgeX.push(centroid.x, nodeX, null);
+          localEntityEdgeY.push(centroid.y, nodeY, null);
+          localEntityNodeX.push(nodeX);
+          localEntityNodeY.push(nodeY);
+          localEntityNodeText.push(`${entity.name} (${entity.mentions})`);
+        });
+
+        if (localEntityEdgeX.length) {
+          pushTrace({
+            x: localEntityEdgeX,
+            y: localEntityEdgeY,
+            mode: "lines",
+            line: { color: toRgba(brand.roseDust, 0.38), width: 1 },
+            hoverinfo: "skip",
+            showlegend: false
+          }, {
+            kind: "entity-edge",
+            clusterId
+          });
+        }
+
+        if (localEntityNodeX.length) {
+          pushTrace({
+            x: localEntityNodeX,
+            y: localEntityNodeY,
+            mode: "markers",
+            text: localEntityNodeText,
+            marker: {
+              size: 7,
+              color: toRgba(brand.amber, 0.94),
+              line: { color: brand.ink, width: 1.1 }
+            },
+            hovertemplate: "%{text}<extra></extra>",
+            showlegend: false
+          }, {
+            kind: "entity-node",
+            clusterId
+          });
+        }
+      });
+
+      const xPadding = xSpan * 0.1;
+      const yPadding = ySpan * 0.14;
       const layout = {
         paper_bgcolor: "rgba(0,0,0,0)",
-        plot_bgcolor: "rgba(20,18,16,0.2)",
-        margin: { t: 22, r: 22, b: 44, l: 44 },
-        font: { family: "DM Mono, monospace", color: "#F5F1EB", size: 12 },
+        plot_bgcolor: "rgba(0,0,0,0)",
+        margin: { t: 52, r: 18, b: 18, l: 18 },
+        font: { family: "DM Mono, monospace", color: brand.cream, size: 11 },
         xaxis: {
-          title: "UMAP-1",
-          gridcolor: "rgba(245,241,235,0.12)",
-          zerolinecolor: "rgba(245,241,235,0.18)"
+          visible: false,
+          range: [xMin - xPadding, xMax + xPadding]
         },
         yaxis: {
-          title: "UMAP-2",
-          gridcolor: "rgba(245,241,235,0.12)",
-          zerolinecolor: "rgba(245,241,235,0.18)"
+          visible: false,
+          range: [yMin - yPadding, yMax + yPadding]
         },
         legend: {
           orientation: "h",
+          yanchor: "bottom",
+          y: 1.02,
+          xanchor: "left",
           x: 0,
-          y: 1.12,
-          bgcolor: "rgba(0,0,0,0)"
-        }
+          font: { family: "DM Mono, monospace", size: 10, color: brand.cream },
+          bgcolor: "rgba(0,0,0,0)",
+          itemclick: false,
+          itemdoubleclick: false
+        },
+        showlegend: true
       };
 
-      Plotly.newPlot("plot", traces, layout, { responsive: true, displayModeBar: false });
+      Plotly.newPlot("plot", traces, layout, { responsive: true, displayModeBar: false }).then(() => {
+        const plotEl = document.getElementById("plot");
+        if (!plotEl) return;
+
+        if (typeof plotEl.removeAllListeners === "function") {
+          plotEl.removeAllListeners("plotly_legendclick");
+          plotEl.removeAllListeners("plotly_doubleclick");
+        }
+
+        let activeClusterId = null;
+
+        const traceOpacityFor = (meta, selectedClusterId) => {
+          if (selectedClusterId === null || selectedClusterId === undefined) return 1;
+
+          if (meta.kind === "similarity") {
+            return (meta.clusters || []).includes(selectedClusterId) ? 0.78 : 0.08;
+          }
+
+          return meta.clusterId === selectedClusterId ? 1 : 0.16;
+        };
+
+        const applyHighlightState = (selectedClusterId) => {
+          const opacities = traceMeta.map((meta) => traceOpacityFor(meta, selectedClusterId));
+          Plotly.restyle(plotEl, { opacity: opacities });
+        };
+
+        applyHighlightState(null);
+
+        plotEl.on("plotly_legendclick", (eventData) => {
+          const clickedMeta = traceMeta[eventData.curveNumber] || {};
+          if (clickedMeta.kind !== "cluster-centroid") return false;
+
+          const clickedClusterId = clickedMeta.clusterId;
+          activeClusterId = activeClusterId === clickedClusterId ? null : clickedClusterId;
+          applyHighlightState(activeClusterId);
+          return false;
+        });
+
+        plotEl.on("plotly_doubleclick", () => {
+          activeClusterId = null;
+          applyHighlightState(activeClusterId);
+          return false;
+        });
+      });
     };
 
     const renderClusters = (clusters) => {
@@ -520,7 +1093,19 @@
 
         const docs = cluster.documents
           .slice(0, 4)
-          .map((doc) => `<li>${doc.title}${doc.year ? ` (${doc.year})` : ""}</li>`)
+          .map((doc) => {
+            const safeTitle = doc.title || "Untitled";
+            const yearSuffix = doc.year ? ` (${doc.year})` : "";
+            const snippet = (doc.abstract || "").trim();
+            const clippedSnippet = snippet.length > 240 ? `${snippet.slice(0, 240).trim()}…` : snippet;
+
+            return `
+              <li>
+                <div class="doc-title">${safeTitle}${yearSuffix}</div>
+                ${clippedSnippet ? `<div class="doc-snippet">${clippedSnippet}</div>` : ""}
+              </li>
+            `;
+          })
           .join("");
 
         card.innerHTML = `
@@ -538,8 +1123,9 @@
       const query = queryInput.value.trim();
       const rationale = rationaleInput.value.trim();
       const maxResults = Number(maxResultsInput.value || 50);
+      const useLockedDemo = PORTFOLIO_MODE && lockedDemoToggle && lockedDemoToggle.checked;
 
-      if (!query) {
+      if (!query && !useLockedDemo) {
         showError("Please enter a search term.");
         return;
       }
@@ -551,17 +1137,21 @@
       try {
         if (PORTFOLIO_MODE) {
           await sleep(1200);
-          const data = buildPortfolioPayload(query, rationale);
+          const data = await getPortfolioPayload(query, rationale, maxResults, useLockedDemo);
 
           summaryBar.innerHTML = `
             <span>Query: ${data.query}</span>
             <span>Docs: ${data.total_documents}</span>
             <span>Clusters: ${data.clusters.length}</span>
-            <span>Mode: portfolio demo</span>
+            <span>Entities: ${(data.entities || []).length}</span>
+            <span>Graph edges: ${(data.knowledge_graph?.edges || []).length}</span>
+            <span>Source: ${data.__payload_source === "locked" ? "real payload" : "synthetic"}</span>
+            <span>Mode: portfolio demo (${data.__demo_mode === "locked" ? "locked dataset" : "editable"})</span>
           `;
 
-          renderPlot(data.points || []);
+          renderSemanticPlot(data);
           renderClusters(data.clusters || []);
+          renderInsights(data);
           resultsNode.style.display = "grid";
           return;
         }
@@ -581,11 +1171,14 @@
           <span>Query: ${data.query}</span>
           <span>Docs: ${data.total_documents}</span>
           <span>Clusters: ${data.clusters.length}</span>
+          <span>Entities: ${(data.entities || []).length}</span>
+          <span>Graph edges: ${(data.knowledge_graph?.edges || []).length}</span>
           <span>Rationale: ${data.rationale ? "included" : "none"}</span>
         `;
 
-        renderPlot(data.points || []);
+        renderSemanticPlot(data);
         renderClusters(data.clusters || []);
+        renderInsights(data);
         resultsNode.style.display = "grid";
       } catch (error) {
         showError(error.message || "Something went wrong while building the cluster map.");
@@ -595,6 +1188,37 @@
     };
 
     submitButton.addEventListener("click", runSearch);
+    if (prefillDemoButton) {
+      prefillDemoButton.addEventListener("click", async () => {
+        if (PORTFOLIO_MODE && lockedDemoToggle) {
+          lockedDemoToggle.checked = true;
+          syncPortfolioLockState();
+
+          try {
+            const payload = await loadLockedDemoPayload();
+            queryInput.value = payload.query || "Locked demo dataset";
+            rationaleInput.value = payload.rationale || "";
+          } catch (_error) {
+            queryInput.value = "Locked demo dataset";
+          }
+        } else {
+          queryInput.value = RECOMMENDED_DEMO_QUERY;
+          rationaleInput.value = RECOMMENDED_DEMO_RATIONALE;
+
+          if (!maxResultsInput.disabled) {
+            maxResultsInput.value = "100";
+          }
+        }
+
+        showError("");
+      });
+    }
+
+    if (lockedDemoToggle) {
+      lockedDemoToggle.addEventListener("change", () => {
+        syncPortfolioLockState();
+      });
+    }
     queryInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();

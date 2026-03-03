@@ -6,6 +6,7 @@ from collections import defaultdict
 import numpy as np
 import matplotlib.pyplot as plt
 import umap
+import networkx as nx
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
 from tqdm import tqdm
@@ -25,6 +26,10 @@ EMBED_MODEL = "text-embedding-3-small"
 LLM_MODEL = "gpt-4o-mini"
 N_CLUSTERS = 4
 SIMILARITY_THRESHOLD = 0.35  # tune this experimentally
+CLUSTER_EDGE_SIMILARITY_THRESHOLD = 0.55
+MIN_RESULTS = 25
+MAX_RESULTS = 120
+DEFAULT_RESULTS = 100
 
 
 def load_environment():
@@ -251,6 +256,189 @@ Explanation:
 
     return claims
 
+
+def extract_entities_from_claims(claims):
+    if not claims:
+        return []
+
+    numbered_claims = "\n".join([f"{idx + 1}. {claim}" for idx, claim in enumerate(claims)])
+    prompt = f"""
+Extract named entities from the claims below.
+Entity types must be one of: concept, method, author, institution, other.
+Return ONLY valid JSON. No markdown. No commentary.
+
+Return a JSON array where each item has:
+- name (string)
+- type (string)
+- source_claim (exact claim text)
+
+Claims:
+{numbered_claims}
+"""
+
+    response = client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0
+    )
+
+    entities_text = response.choices[0].message.content
+    match = re.search(r"\[.*\]", entities_text, re.DOTALL)
+    if match:
+        entities_text = match.group(0)
+
+    try:
+        raw_entities = json.loads(entities_text)
+    except Exception:
+        print("⚠️ Could not parse entities cleanly. Raw output:")
+        print(entities_text)
+        return []
+
+    cleaned_entities = []
+    valid_types = {"concept", "method", "author", "institution", "other"}
+    for entity in raw_entities:
+        if not isinstance(entity, dict):
+            continue
+
+        name = (entity.get("name") or "").strip()
+        entity_type = (entity.get("type") or "other").strip().lower()
+        source_claim = (entity.get("source_claim") or "").strip()
+
+        if not name:
+            continue
+
+        if entity_type not in valid_types:
+            entity_type = "other"
+
+        cleaned_entities.append({
+            "name": name,
+            "type": entity_type,
+            "source_claim": source_claim
+        })
+
+    return cleaned_entities
+
+
+def normalize_entity_name(name):
+    normalized = re.sub(r"\s+", " ", name.strip().lower())
+    normalized = re.sub(r"[^a-z0-9\s\-]", "", normalized)
+    return normalized
+
+
+def resolve_entities(entities):
+    buckets = {}
+
+    for entity in entities:
+        canonical_key = normalize_entity_name(entity["name"])
+        if not canonical_key:
+            continue
+
+        if canonical_key not in buckets:
+            buckets[canonical_key] = {
+                "id": f"entity:{len(buckets)}",
+                "name": entity["name"],
+                "types": defaultdict(int),
+                "aliases": set(),
+                "source_claims": set(),
+                "clusters": defaultdict(int)
+            }
+
+        bucket = buckets[canonical_key]
+        bucket["types"][entity["type"]] += 1
+        bucket["aliases"].add(entity["name"])
+        if entity.get("source_claim"):
+            bucket["source_claims"].add(entity["source_claim"])
+
+        cluster_id = entity.get("cluster")
+        if cluster_id is not None:
+            bucket["clusters"][int(cluster_id)] += 1
+
+    resolved = []
+    for bucket in buckets.values():
+        top_type = max(bucket["types"].items(), key=lambda item: item[1])[0]
+        resolved.append({
+            "id": bucket["id"],
+            "name": bucket["name"],
+            "type": top_type,
+            "aliases": sorted(bucket["aliases"]),
+            "source_claims": sorted(bucket["source_claims"]),
+            "clusters": [
+                {"cluster": cluster_id, "mentions": mentions}
+                for cluster_id, mentions in sorted(bucket["clusters"].items())
+            ],
+            "mentions": int(sum(bucket["types"].values()))
+        })
+
+    return resolved
+
+
+def serialize_graph(graph):
+    return {
+        "nodes": [
+            {
+                "id": node_id,
+                **attrs
+            }
+            for node_id, attrs in graph.nodes(data=True)
+        ],
+        "edges": [
+            {
+                "source": source,
+                "target": target,
+                **attrs
+            }
+            for source, target, attrs in graph.edges(data=True)
+        ]
+    }
+
+
+def build_knowledge_graph(clusters, centroids, resolved_entities):
+    graph = nx.Graph()
+
+    for cluster in clusters:
+        node_id = f"cluster:{cluster['id']}"
+        graph.add_node(
+            node_id,
+            type="cluster",
+            label=f"Cluster {cluster['id']}",
+            cluster_id=int(cluster["id"]),
+            count=int(cluster["count"]),
+            summary=cluster.get("summary", "")
+        )
+
+    if len(centroids) > 1:
+        similarities = cosine_similarity(centroids)
+        for i in range(len(centroids)):
+            for j in range(i + 1, len(centroids)):
+                similarity_score = float(similarities[i, j])
+                if similarity_score >= CLUSTER_EDGE_SIMILARITY_THRESHOLD:
+                    graph.add_edge(
+                        f"cluster:{i}",
+                        f"cluster:{j}",
+                        relation="semantic_similarity",
+                        weight=similarity_score
+                    )
+
+    for entity in resolved_entities:
+        graph.add_node(
+            entity["id"],
+            type="entity",
+            label=entity["name"],
+            entity_type=entity["type"],
+            mentions=entity["mentions"],
+            aliases=entity["aliases"]
+        )
+
+        for cluster_ref in entity.get("clusters", []):
+            graph.add_edge(
+                entity["id"],
+                f"cluster:{cluster_ref['cluster']}",
+                relation="mentioned_in_claims_for_cluster",
+                weight=float(cluster_ref["mentions"])
+            )
+
+    return serialize_graph(graph)
+
 # -----------------------------
 # MAP CLAIMS TO CLUSTERS
 # -----------------------------
@@ -290,7 +478,11 @@ def generate_reflection(results):
         print("")
 
 
-def prompt_max_results(min_results=25, max_results=50, default=50):
+def prompt_max_results(
+    min_results=MIN_RESULTS,
+    max_results=MAX_RESULTS,
+    default=DEFAULT_RESULTS
+):
     while True:
         raw = input(
             f"How many results? ({min_results}-{max_results}, default {default}):\n"
@@ -311,7 +503,13 @@ def prompt_max_results(min_results=25, max_results=50, default=50):
         print(f"Please choose a value between {min_results} and {max_results}.")
 
 
-def build_cluster_payload(query, rationale, max_results=50, n_clusters=N_CLUSTERS):
+def build_cluster_payload(
+    query,
+    rationale,
+    explanation="",
+    max_results=DEFAULT_RESULTS,
+    n_clusters=N_CLUSTERS
+):
     require_openai_client()
 
     pmids = search_pubmed(query, max_results)
@@ -324,7 +522,7 @@ def build_cluster_payload(query, rationale, max_results=50, n_clusters=N_CLUSTER
 
     texts = [paper["abstract"] for paper in corpus]
     embeddings = embed_texts(texts)
-    labels, _ = cluster_embeddings(embeddings, n_clusters=n_clusters)
+    labels, centroids = cluster_embeddings(embeddings, n_clusters=n_clusters)
     points = compute_umap_points(embeddings)
 
     cluster_docs = defaultdict(list)
@@ -347,6 +545,30 @@ def build_cluster_payload(query, rationale, max_results=50, n_clusters=N_CLUSTER
             "documents": docs[:10]
         })
 
+    analysis_text = (explanation or "").strip() or (rationale or "").strip()
+    claims = []
+    claim_results = []
+    resolved_entities = []
+
+    if analysis_text:
+        claims = extract_claims(analysis_text)
+        if claims:
+            claim_results = classify_claims(claims, centroids)
+            claim_cluster_lookup = {}
+            for result in claim_results:
+                if result["similarity"] >= SIMILARITY_THRESHOLD:
+                    claim_cluster_lookup[result["claim"]] = int(result["cluster"])
+
+            extracted_entities = extract_entities_from_claims(claims)
+            for entity in extracted_entities:
+                source_claim = entity.get("source_claim")
+                if source_claim in claim_cluster_lookup:
+                    entity["cluster"] = claim_cluster_lookup[source_claim]
+
+            resolved_entities = resolve_entities(extracted_entities)
+
+    knowledge_graph = build_knowledge_graph(clusters, centroids, resolved_entities)
+
     points_payload = []
     for i, point in enumerate(points):
         points_payload.append({
@@ -364,7 +586,11 @@ def build_cluster_payload(query, rationale, max_results=50, n_clusters=N_CLUSTER
         "rationale": rationale,
         "total_documents": len(corpus),
         "clusters": clusters,
-        "points": points_payload
+        "points": points_payload,
+        "claims": claims,
+        "claim_alignment": claim_results,
+        "entities": resolved_entities,
+        "knowledge_graph": knowledge_graph
     }
 
 
@@ -376,20 +602,40 @@ def create_web_app():
     def index():
         return send_from_directory(".", "index.html")
 
+    @app.get("/demo_payload.json")
+    def demo_payload():
+        payload_path = Path("demo_payload.json")
+        if not payload_path.exists():
+            return jsonify({"error": "demo_payload.json not found"}), 404
+        return send_from_directory(".", "demo_payload.json")
+
+    @app.get("/demo_payload_human_aging_200.json")
+    def demo_payload_human_aging():
+        payload_path = Path("demo_payload_human_aging_200.json")
+        if not payload_path.exists():
+            return jsonify({"error": "demo_payload_human_aging_200.json not found"}), 404
+        return send_from_directory(".", "demo_payload_human_aging_200.json")
+
     @app.post("/api/search")
     def api_search():
         payload = request.get_json(silent=True) or {}
         query = (payload.get("query") or "").strip()
         rationale = (payload.get("rationale") or "").strip()
-        max_results = int(payload.get("max_results") or 50)
+        explanation = (payload.get("explanation") or "").strip()
+        max_results = int(payload.get("max_results") or DEFAULT_RESULTS)
 
         if not query:
             return jsonify({"error": "Please provide a search query."}), 400
 
-        max_results = max(25, min(50, max_results))
+        max_results = max(MIN_RESULTS, min(MAX_RESULTS, max_results))
 
         try:
-            result = build_cluster_payload(query, rationale, max_results=max_results)
+            result = build_cluster_payload(
+                query,
+                rationale,
+                explanation=explanation,
+                max_results=max_results
+            )
             return jsonify(result)
         except Exception as exc:
             return jsonify({"error": str(exc)}), 500
@@ -464,6 +710,37 @@ def main(no_plot=False):
 
     results = classify_claims(claims, centroids)
     generate_reflection(results)
+
+    extracted_entities = extract_entities_from_claims(claims)
+    claim_cluster_lookup = {
+        result["claim"]: int(result["cluster"])
+        for result in results
+        if result["similarity"] >= SIMILARITY_THRESHOLD
+    }
+    for entity in extracted_entities:
+        source_claim = entity.get("source_claim")
+        if source_claim in claim_cluster_lookup:
+            entity["cluster"] = claim_cluster_lookup[source_claim]
+
+    resolved_entities = resolve_entities(extracted_entities)
+
+    cluster_summaries = []
+    for cluster_id in sorted(set(int(x) for x in labels.tolist())):
+        cluster_summaries.append({
+            "id": cluster_id,
+            "count": int((labels == cluster_id).sum()),
+            "summary": ""
+        })
+    knowledge_graph = build_knowledge_graph(cluster_summaries, centroids, resolved_entities)
+
+    print("\nResolved Entities:")
+    for entity in resolved_entities:
+        print(f"- {entity['name']} ({entity['type']}) | mentions: {entity['mentions']}")
+
+    print(
+        f"\nKnowledge Graph: {len(knowledge_graph['nodes'])} nodes, "
+        f"{len(knowledge_graph['edges'])} edges"
+    )
 
 
 if __name__ == "__main__":

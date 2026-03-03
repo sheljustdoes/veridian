@@ -8,3 +8,4 @@ matplotlib
 umap-learn
 flask
 flask-cors
+networkx
